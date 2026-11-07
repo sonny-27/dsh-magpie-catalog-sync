@@ -1,0 +1,50 @@
+{
+  "name": "dsh-magpie-catalog-sync",
+  "version": "0.4.1",
+  "description": "Automatically import Magpie model capabilities, reasoning efforts and advertised service tiers into DSH and DS Bot.",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "client.js",
+    "client.mjs",
+    "lib",
+    "server",
+    "scripts/install-local.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.19",
+    "dsh": "^0.1.5-rc.2 || ^0.2.1-rc.5 || ^0.2.2-rc.1"
+  },
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "slots"
+      ]
+    }
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sonny-27/dsh-magpie-catalog-sync.git"
+  }
+}

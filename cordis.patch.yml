@@ -1,0 +1,3 @@
+- insert:
+    - id: magpie-catalog-sync
+      name: dsh-magpie-catalog-sync
