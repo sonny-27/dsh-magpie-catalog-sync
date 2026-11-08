@@ -22,17 +22,25 @@ function schema() {
   };
 }
 
-test('compacts schema annotations without deleting real parameter names, references or validation rules', () => {
+function parameterReference(tool) {
+  const marker = 'Parameter reference (all original descriptions, by JSON Schema path):\n';
+  return JSON.parse(tool.description.slice(tool.description.lastIndexOf(marker) + marker.length));
+}
+
+test('relocates every parameter description losslessly and preserves parameter names, references and validation rules', () => {
   const input = { model: 'antigravity/gemini-4-argon', input: 'Synthetic test', reasoning: { effort: 'high' }, max_output_tokens: 65536,
     tools: [{ type: 'function', name: 'fixture', description: 'Tool instructions and permission rules stay intact', parameters: schema() }] };
   const snapshot = structuredClone(input);
   const result = compactGemini4Tools(input);
-  assert.ok(result.removedParameterDescriptions > 0);
+  assert.ok(result.relocatedParameterDescriptions > 0);
   assert.deepEqual(input, snapshot);
   assert.equal(result.body.input, input.input);
   assert.equal(result.body.reasoning, input.reasoning);
   assert.equal(result.body.max_output_tokens, 65536);
-  assert.equal(result.body.tools[0].description, input.tools[0].description);
+  assert.ok(result.body.tools[0].description.startsWith(input.tools[0].description + '\n\n'));
+  const reference = parameterReference(result.body.tools[0]);
+  assert.equal(reference.length, result.relocatedParameterDescriptions);
+  assert.ok(reference.some(note => note.path === '#/properties/description/description' && note.description === 'Help for the real description parameter'));
   const output = result.body.tools[0].parameters;
   assert.equal(output.description, undefined);
   assert.deepEqual(Object.keys(output.properties), Object.keys(input.tools[0].parameters.properties));
@@ -48,6 +56,30 @@ test('compacts schema annotations without deleting real parameter names, referen
   assert.ok(output.$defs.description.properties.description);
   assert.deepEqual(output.allOf, [{ if: { required: ['title'] }, then: { minProperties: 2 } }]);
   assert.deepEqual(output['x-literal'], { description: 'Extension data must stay intact' });
+  const restored = structuredClone(output);
+  for (const note of reference) {
+    const parts = note.path.slice(2).split('/').map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+    let node = restored;
+    for (const part of parts.slice(0, -1)) node = node[part];
+    Object.defineProperty(node, parts.at(-1), { value: note.description, enumerable: true, writable: true, configurable: true });
+  }
+  assert.deepEqual(restored, snapshot.tools[0].parameters);
+  assert.equal(compactGemini4Tools(result.body).body, result.body);
+});
+
+test('preserves multiline Unicode descriptions, duplicate notes and escaped JSON Pointer property names', () => {
+  const documentation = '单位：毫秒，0 表示不等待。\nUse the exact path; preserve "quotes" and spaces.  ';
+  const body = { model: 'antigravity/gemini-4-argon', tools: [{ name: 'fixture', input_schema: {
+    type: 'object', properties: { 'a/b~c': { type: 'string', description: documentation }, description: { type: 'string', description: documentation } },
+    required: ['a/b~c', 'description'], additionalProperties: false,
+  } }] };
+  const result = compactGemini4Tools(body);
+  const notes = parameterReference(result.body.tools[0]);
+  assert.deepEqual(notes, [
+    { path: '#/properties/a~1b~0c/description', description: documentation },
+    { path: '#/properties/description/description', description: documentation },
+  ]);
+  assert.deepEqual(result.body.tools[0].input_schema.required, ['a/b~c', 'description']);
 });
 
 test('supports Responses, Chat and Messages tool declarations and preserves built-in tools', () => {
@@ -61,6 +93,7 @@ test('supports Responses, Chat and Messages tool declarations and preserves buil
     assert.equal(result.body.tools.length, 2);
     const tool = result.body.tools[0].function ?? result.body.tools[0];
     assert.equal((tool.parameters ?? tool.input_schema).description, undefined);
+    assert.ok(parameterReference(tool).some(note => note.description === 'Parameter documentation'));
     assert.equal(result.body.tools[1], builtIn);
   }
 });
@@ -95,9 +128,13 @@ test('the real relay applies the compatibility switch, keeps High and 64K output
     assert.equal(response.status, 200);
     assert.match(await response.text(), /response.completed/);
     assert.equal(seen.at(-1).tools[0].parameters.description, enabled ? undefined : 'Parameter documentation');
-    assert.equal(Boolean(records.at(-1).removedParameterDescriptions), enabled);
+    assert.equal(Boolean(records.at(-1).relocatedParameterDescriptions), enabled);
+    assert.equal(records.at(-1).removedParameterDescriptions, undefined);
     assert.deepEqual(seen.at(-1).reasoning, { effort: 'high' });
     assert.equal(seen.at(-1).max_output_tokens, 65536);
-    assert.equal(seen.at(-1).tools[0].description, 'Required instructions');
+    if (enabled) {
+      assert.ok(seen.at(-1).tools[0].description.startsWith('Required instructions\n\n'));
+      assert.ok(parameterReference(seen.at(-1).tools[0]).some(note => note.description === 'Parameter documentation'));
+    } else assert.equal(seen.at(-1).tools[0].description, 'Required instructions');
   }
 });

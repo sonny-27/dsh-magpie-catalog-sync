@@ -287,8 +287,8 @@ function SubscriptionSettings() {
       "section",
       { style: style.card },
       h("h3", null, "模型兼容"),
-      checkbox("gemini4CompactTools", "精简 Gemini 4 的参数说明"),
-      h("small", null, "仅影响 Antigravity 的 Gemini 4，用于复杂工具声明引起的回复中断。保留全部工具、参数结构和校验约束；工具本身的使用说明也保留。关闭后发送完整参数说明。")
+      checkbox("gemini4CompactTools", "Gemini 4 完整参数说明兼容"),
+      h("small", null, "仅影响 Antigravity 的 Gemini 4。将完整参数说明按路径附到工具总说明中，保留全部文字、工具和参数校验，不再删除说明。关闭后将说明留在原来的 Schema 位置。说明位置变化仍可能影响模型理解。")
     ),
     h(
       "section",
