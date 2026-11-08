@@ -127,6 +127,21 @@ function createSpeedIcon(mode, doc = document) {
 
 // lib/settings-ui.mjs
 var import_react = __toESM(require("react"), 1);
+
+// lib/image-binding.mjs
+function bindingChanges(binding, state) {
+  const name = binding.capability?.name;
+  if (!name || binding.pendingConfiguration) return [];
+  const mains = new Set(state.mainBotIds ?? []);
+  return (state.bots ?? []).flatMap((bot) => {
+    const attached = Boolean(bot.capabilities?.includes(name));
+    if (!binding.enabled) return attached ? [{ botId: bot.id, name, attached: false }] : [];
+    const add = binding.scope === "all" || binding.scope === "main" && mains.has(bot.id);
+    return add && !attached ? [{ botId: bot.id, name, attached: true }] : [];
+  });
+}
+
+// lib/settings-ui.mjs
 var h = import_react.default.createElement;
 var style = {
   card: { border: "1px solid #8884", borderRadius: 12, padding: 18, marginBottom: 16 },
@@ -170,13 +185,7 @@ function ensureImageBinding() {
     const existing = (state.capabilities ?? []).find((x) => x.name === name);
     if (existing && !existing.description?.startsWith("Magpie 订阅管理：")) throw new Error("已有同名绘图工具，请先在工具库中重命名：" + name);
     if (binding.enabled && (!existing || existing.url !== binding.capability.url || JSON.stringify(existing.headers) !== JSON.stringify(binding.capability.headers))) await botCall("capability-save", binding.capability);
-    if (binding.scope !== "manual" || !binding.enabled) {
-      const mains = new Set(state.mainBotIds ?? []);
-      for (const bot of state.bots ?? []) {
-        const wanted = Boolean(binding.enabled && (binding.scope === "all" || mains.has(bot.id)));
-        if (Boolean(bot.capabilities?.includes(name)) !== wanted) await botCall("bot-capability", { botId: bot.id, name, attached: wanted });
-      }
-    }
+    for (const change of bindingChanges(binding, state)) await botCall("bot-capability", change);
     return { enabled: binding.enabled, scope: binding.scope };
   })().finally(() => {
     bindingTask = void 0;
@@ -184,6 +193,20 @@ function ensureImageBinding() {
   return bindingTask;
 }
 function SubscriptionSettings() {
+  const [diagnostics, D] = import_react.default.useState([]);
+  import_react.default.useEffect(() => {
+    let stopped = false;
+    const poll = () => subscriptionAPI("diagnostics").then((value) => {
+      if (!stopped) D(value);
+    }).catch(() => {
+    });
+    poll();
+    const timer = setInterval(poll, 2e3);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
   const [view, V] = import_react.default.useState(), [form, F] = import_react.default.useState({}), [key, K] = import_react.default.useState(""), [policy, P] = import_react.default.useState(), [message, M] = import_react.default.useState(""), [busy, B] = import_react.default.useState(false);
   const set = (name, value) => F((x) => ({ ...x, [name]: value }));
   const refresh = async () => {
@@ -228,6 +251,24 @@ function SubscriptionSettings() {
     { style: { maxWidth: 920, padding: 24 } },
     h("h2", null, "Magpie 订阅"),
     h("p", null, "模型、绘图与搜索共用下面的 API 地址和 Key。"),
+    h(
+      "section",
+      { style: style.card },
+      h("h3", null, "搜索与绘图自检"),
+      h("p", null, "连接自检不生成图片；真实出图自检会消耗上游绘图额度。结果只显示状态，不展示密钥或图片下载链接。"),
+      h("div", { style: style.row }, ...[["search", "搜索自检"], ["image", "绘图连接自检"], ["image-generate", "真实出图自检（消耗额度）"]].map(([kind, label]) => button(label, async () => {
+        D(await subscriptionAPI("diagnostics", { kind }));
+        return "自检已启动，结果会自动刷新。";
+      }, diagnostics.some((x) => x.kind === kind && ["running", "pending"].includes(x.state))))),
+      ...diagnostics.map((result) => h(
+        "div",
+        { key: result.kind, role: "status", style: { marginTop: 12 } },
+        h("strong", null, { search: "搜索", image: "绘图连接", "image-generate": "真实出图" }[result.kind] + "：" + { running: "检查中", pending: "生成中", passed: "通过", failed: "失败" }[result.state]),
+        ...result.stages.map((item, i) => h("p", { key: i }, item.name + "：" + { running: "检查中", passed: "通过", failed: "失败" }[item.state] + (item.detail ? " · " + item.detail : ""))),
+        result.note && h("p", null, result.note),
+        result.error && h("p", null, result.error)
+      ))
+    ),
     h(
       "section",
       { style: style.card },
