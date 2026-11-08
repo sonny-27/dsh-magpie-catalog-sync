@@ -24,7 +24,11 @@ test('image relay authenticates local tools separately, forwards one upstream ke
   const call = (key, method, params) => fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 'test', method, params }) });
   assert.equal((await call(connection.key, 'tools/list', {})).status, 401);
   const list = await (await call('local-tool-test-token', 'tools/list', {})).json();
-  assert.deepEqual(list.result.tools.map(x => x.name), ['generate_image', 'generation_result']);
+  assert.deepEqual(list.result.tools.map(x => x.name), ['generate_image', 'edit_image', 'generation_result']);
+  assert.ok(list.result.tools[0].description.startsWith('Draw'));
+  assert.ok(list.result.tools[1].inputSchema.required.includes('reference_images'));
+  assert.equal(list.result.tools[1].inputSchema.properties.reference_images.minItems, 1);
+  assert.equal(list.result.tools[0].inputSchema.properties.reference_images.minItems, undefined);
   assert.deepEqual(list.result.tools[0].inputSchema.properties.model.enum, models);
   assert.equal(list.result.tools[0].inputSchema.properties.model.default, models[1]);
   assert.equal((await call('local-tool-test-token', 'tools/call', { name: 'generate_image', arguments: { prompt: 'test' } })).status, 200);

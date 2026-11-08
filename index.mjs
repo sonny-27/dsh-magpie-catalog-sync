@@ -4,6 +4,7 @@ import { PLUGIN } from './lib/controller.mjs';
 import { MagpieSubscription } from './lib/subscription.mjs';
 import { parseLegacyModel } from './lib/catalog.mjs';
 import { subscriptionRoutes } from './lib/settings-api.mjs';
+import { createHostReferenceImages } from './lib/reference-images.mjs';
 
 export const name = PLUGIN;
 export const inject = ['settings', 'credentials', 'webServer'];
@@ -18,6 +19,9 @@ export function apply(ctx) {
   const profileName = profile?.dir ? path.basename(profile.dir) : instance?.profile ?? (flag >= 0 ? process.argv[flag + 1] : process.env.DSH_PROFILE);
   if (!home || !/^[a-zA-Z0-9_-]+$/.test(profileName ?? '')) throw new Error('旧版 DSH 请使用本地安装器指定 --home 和 --profile');
   const controller = new MagpieSubscription({ root: path.join(home, PLUGIN, profileName), settings: ctx.get('settings'), credentials: ctx.get('credentials'),
+    resolveReferenceImages: createHostReferenceImages({ home,
+      getWorkingDirectory: () => ctx.get('workingDirectory')?.defaultDirectory,
+      getAttachmentStore: () => ctx.get('attachments') }),
     migrateDefaults: async sync => {
       const service = ctx.get('agentDefaultModel'), selected = service?.currentSelection?.();
       if (selected?.provider !== sync.config.providerId) return;
