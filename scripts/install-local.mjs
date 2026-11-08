@@ -7,7 +7,7 @@ import { normalizeBaseURL } from '../lib/catalog.mjs';
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i];
-  if (!key.startsWith('--') || !process.argv[i + 1]) throw new Error('参数格式：--home <目录> --profile <名称> --upstream <地址> [--key-file <私密文件>]');
+  if (!key.startsWith('--') || !process.argv[i + 1]) throw new Error('参数格式：--home <目录> --profile <名称> [--upstream <地址>] [--key-file <私密文件>]');
   args[key.slice(2)] = process.argv[i + 1];
 }
 const home = path.resolve(args.home ?? '');
@@ -41,7 +41,8 @@ const dataDir = path.join(home, name, profileName);
 fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 const configPath = path.join(dataDir, 'config.json');
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
-config.upstream = normalizeBaseURL(args.upstream ?? config.upstream ?? '');
+const upstream = args.upstream ?? config.upstream;
+config.upstream = upstream ? normalizeBaseURL(upstream) : '';
 config.providerId ??= 'magpie-sync';
 config.credentialRef ??= 'MAGPIE_CATALOG_SYNC_KEY';
 config.pollSeconds ??= 300;

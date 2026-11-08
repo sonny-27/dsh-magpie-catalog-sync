@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { PLUGIN } from './lib/controller.mjs';
 import { MagpieSubscription } from './lib/subscription.mjs';
 import { parseLegacyModel } from './lib/catalog.mjs';
+import { subscriptionRoutes } from './lib/settings-api.mjs';
 
 export const name = PLUGIN;
 export const inject = ['settings', 'credentials', 'webServer'];
@@ -25,30 +26,14 @@ export function apply(ctx) {
       await sync.setPreference({ botId: '__profile_default__', model: legacy.canonical, tier: legacy.serviceTier ?? '', defaultEffort: legacy.defaultEffort });
       await service.saveSelection({ ...selected, model: legacy.canonical });
     },
-    onStatus: status => { if (status.state !== 'ready') ctx.logger.warn(`${PLUGIN}: ${status.lastError}`); } });
+    onStatus: status => { if (status.lastError) ctx.logger.warn(`${PLUGIN}: ${status.lastError}`); } });
   ctx.provide('magpieCatalogSync', { sync: () => controller.sync(), status: () => controller.status(), controls: () => controller.controls(), setPreference: input => controller.setPreference(input) });
   ctx.inject(['connection'], scope => {
     if (!scope.connection.fetch?.register) { ctx.logger.warn('订阅 GUI 需要支持 connection.fetch 的 DSH 版本；模型同步仍可使用'); return; }
-    for (const [route, methods, action] of [
-      ['settings', ['GET'], () => controller.settingsView()],
-      ['save', ['POST'], input => controller.updateSettings(input)],
-      ['connect', ['POST'], input => controller.updateConnection(input)],
-      ['sync', ['POST'], async () => { await controller.sync(); return controller.settingsView(); }],
-      ['bindings', ['GET'], () => controller.imageBinding()],
-      ['search-policy', ['GET', 'POST'], input => controller.searchPolicy(input)],
-    ]) scope.effect(() => scope.connection.fetch.register({
-      path: '/api/magpie-subscription-' + route, methods, requestBody: 'buffered',
-      fetch: async request => {
-        try {
-          if (!controller.relay) throw new Error('Magpie 订阅正在启动，请稍后刷新');
-          const input = request.method === 'POST' ? await request.json() : undefined;
-          return Response.json(await action(input), { headers: { 'cache-control': 'no-store' } });
-        } catch (error) { return Response.json({ error: String(error.message).replace(/Bearer\s+\S+/gi, '[凭据]') }, { status: 400 }); }
-      },
-    }), PLUGIN + ':' + route);
+    for (const route of subscriptionRoutes(controller)) scope.effect(() => scope.connection.fetch.register(route), PLUGIN + ':' + route.path);
   });
   ctx.inject(['web'], scope => {
-    const common = { id: 'magpie-gateway', available: () => Boolean(controller.gatewayTools && controller.config?.searchEnabled), ready: async () => Boolean(controller.config?.searchEnabled && await controller.getKey()) };
+    const common = { id: 'magpie-gateway', available: () => Boolean(controller.connectionConfigured && controller.gatewayTools && controller.config?.searchEnabled), ready: async () => Boolean(controller.config?.searchEnabled && await controller.getKey()) };
     scope.effect(() => scope.web.registerSearchProvider({ ...common, search: (request, signal) => controller.gatewayTools.search(request, signal) }), PLUGIN + ':web-search');
     scope.effect(() => scope.web.registerFetchProvider({ ...common, fetch: (request, signal) => controller.gatewayTools.fetch(request, signal) }), PLUGIN + ':web-fetch');
   });

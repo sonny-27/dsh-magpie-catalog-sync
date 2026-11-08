@@ -165,6 +165,7 @@ function ensureImageBinding() {
       throw error;
     }
     const binding = await subscriptionAPI("bindings");
+    if (binding.pendingConfiguration) return { skipped: true, pendingConfiguration: true };
     const name = binding.capability.name;
     const existing = (state.capabilities ?? []).find((x) => x.name === name);
     if (existing && !existing.description?.startsWith("Magpie 订阅管理：")) throw new Error("已有同名绘图工具，请先在工具库中重命名：" + name);
@@ -231,6 +232,7 @@ function SubscriptionSettings() {
       "section",
       { style: style.card },
       h("h3", null, "统一连接"),
+      view.status?.state === "needs_configuration" && h("p", { role: "status" }, "订阅尚未配置完成。请填写 API 地址和 Key，然后点击“验证并保存连接”。"),
       h("label", { style: style.row }, "API 地址", h("input", { "aria-label": "Magpie API 地址", style: { ...style.input, flex: 1 }, value: form.upstream ?? "", onChange: (e) => set("upstream", e.target.value) })),
       h("label", { style: style.row }, "API Key", h("input", { "aria-label": "Magpie API Key", style: { ...style.input, flex: 1 }, type: "password", autoComplete: "off", value: key, placeholder: view.keyConfigured ? "已保存 · 留空保留现有 Key" : "填写 Magpie 网关 Key", onChange: (e) => K(e.target.value) })),
       button("验证并保存连接", async () => {

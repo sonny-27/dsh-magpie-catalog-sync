@@ -1,4 +1,4 @@
-# Magpie 订阅 0.4.1
+# Magpie 订阅 0.4.2
 
 为 DSBot / DeepSeek Harness 同步模型列表、上下文、输出上限、视觉能力和推理档位。每个模型只生成一个条目；速度与模型、思考强度分开保存。
 
@@ -7,6 +7,8 @@ DSH 会在上下文中扣除适配器 `maxTokens` 作为默认输出预留，不
 ## GUI：连接、绘图与搜索
 
 入口：**DSBot 账户菜单 → Bot 设置 → Harness 设置 → Magpie 订阅**。原版 DSH 在原生设置中打开「Magpie 订阅」。
+
+0.4.2 修复首次安装未提供 Key 时的配置死锁：此时状态为 `needs_configuration`，GUI 可正常填写地址和 Key；验证并保存后会在当前进程自动建立代理、同步模型。设置页只等待本地配置加载，不等待代理或上游请求。Key 保存在宿主凭据服务中，不要求插件数据目录里存在密钥文件。
 
 - 一个 Magpie API 地址和 Key，统一用于模型、搜索与绘图。已保存的网关 Key 不回传浏览器；留空保留，更换地址时要求提供该地址的 Key，先验证后保存。
 - 默认每 300 秒同步新模型及 GPT/Gemini 绘图版本，可调整周期、暂停或立即同步。暂停不禁用已缓存的模型。
@@ -36,6 +38,14 @@ Fast 使用单闪电；Ultra Fast 使用叠加双闪电。默认速度图标为�
 ## 安装
 
 Node.js 22.19+。DSBot 0.3.1 / DSH 0.2.2 支持按会话自动传递速度。旧 DSH 0.1.5 可同步模型能力及使用 profile 级速度默认值，其适配器没有按会话请求头扩展，不能保证按 Bot 区分速度。
+
+通过 GUI 首次配置时，可以省略 `--upstream` 和 `--key-file`：
+
+```powershell
+node scripts/install-local.mjs --home C:/Users/你的用户/.ds-bot --profile ds-bot
+```
+
+重启应用加载插件后，在「Magpie 订阅」中填写连接信息即可。也可在安装时预先提供地址和本机私密的 Key 文件：
 
 ```powershell
 node scripts/install-local.mjs --home C:/Users/你的用户/.ds-bot --profile ds-bot --upstream https://api.example.com:18443/v1 --key-file C:/私密目录/magpie.key
