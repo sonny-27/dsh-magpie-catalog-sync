@@ -49,6 +49,14 @@ test('generation self-test coalesces repeated clicks and polls the original pend
   assert.equal(JSON.stringify(d.view()).includes('fixture-image-data'), false);
 });
 
+test('video connection check reports missing authorization without submitting generation', async () => {
+  const { c, d, counts } = fixture();
+  c.config.videoEnabled = true;
+  d.start('video'); await d.jobs.get('video').task;
+  assert.equal(d.view().find(x => x.kind === 'video').state, 'failed');
+  assert.equal(counts.generations, 0);
+});
+
 test('diagnostic errors redact credentials and URLs and identify the failed stage', async () => {
   const { c, d } = fixture();
   c.gatewayTools.rpc = async () => { throw new Error('refused fixture-upstream-key https://gateway.example/?key=private'); };

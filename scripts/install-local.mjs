@@ -21,7 +21,10 @@ const name = 'dsh-magpie-catalog-sync';
 const source = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
 const files = [];
+const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
 function collect(relative) {
+  const portable = relative.replaceAll('\\', '/');
+  if (portable.startsWith('server/') && portable !== 'server/gemini-video' && !serverSources.has(portable)) return;
   const file = path.join(source, relative), stat = fs.lstatSync(file);
   if (stat.isSymbolicLink()) throw new Error('插件源文件不能是符号链接');
   if (stat.isDirectory()) for (const child of fs.readdirSync(file)) collect(path.join(relative, child));

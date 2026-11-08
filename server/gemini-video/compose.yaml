@@ -1,0 +1,31 @@
+services:
+  gemini-video:
+    image: local/magpie-gemini-video:0.4.7
+    container_name: magpie-gemini-video
+    build: ./app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8012:8010"
+    environment:
+      GEMINI_PROXY: http://searxng-clash:7896
+      GEMINI_COOKIE_PATH: /data/cookies
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    pids_limit: 96
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+    networks: [proxy]
+networks:
+  proxy:
+    external: true
+    name: searxng-proxy
