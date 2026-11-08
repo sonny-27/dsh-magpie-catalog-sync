@@ -286,6 +286,13 @@ function SubscriptionSettings() {
     h(
       "section",
       { style: style.card },
+      h("h3", null, "模型兼容"),
+      checkbox("gemini4CompactTools", "精简 Gemini 4 的参数说明"),
+      h("small", null, "仅影响 Antigravity 的 Gemini 4，用于复杂工具声明引起的回复中断。保留全部工具、参数结构和校验约束；工具本身的使用说明也保留。关闭后发送完整参数说明。")
+    ),
+    h(
+      "section",
+      { style: style.card },
       h("h3", null, "自动订阅"),
       checkbox("autoSyncEnabled", "自动同步新模型、能力与绘图版本"),
       h("label", { style: style.row }, "刷新间隔（秒）", h("input", { "aria-label": "刷新间隔（秒）", style: style.input, type: "number", min: 60, max: 86400, value: form.pollSeconds, onChange: (e) => set("pollSeconds", Number(e.target.value)) })),

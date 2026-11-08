@@ -23,9 +23,10 @@ test('GUI settings persist across restart, paused subscriptions stay offline, an
   t.after(() => sync.close());
   await sync.start();
   assert.equal(sections[1].value.searchProvider, 'magpie-gateway'); assert.equal(sections[1].value.otherSetting, true);
-  await sync.updateSettings({ autoSyncEnabled: false, defaultImageProvider: 'gemini', pollSeconds: 600, geminiImageModel: 'antigravity/gemini-image', imageScope: 'all' });
+  await sync.updateSettings({ autoSyncEnabled: false, defaultImageProvider: 'gemini', pollSeconds: 600, geminiImageModel: 'antigravity/gemini-image', imageScope: 'all', gemini4CompactTools: false });
   const view = await sync.settingsView();
   assert.equal(view.selectedImageModel, 'antigravity/gemini-image'); assert.equal(sync.timer?._destroyed, true);
+  assert.equal(view.gemini4CompactTools, false);
   assert.equal(JSON.stringify(view).includes('private-gateway-test-secret'), false); assert.equal(JSON.stringify(view).includes(sync.toolToken), false);
   await assert.rejects(() => sync.updateConnection({ upstream: 'https://different.example/v1' }), /同时填写/);
   assert.equal(sync.config.upstream, 'https://gateway.example/v1');
@@ -34,5 +35,6 @@ test('GUI settings persist across restart, paused subscriptions stay offline, an
   sync = new MagpieSubscription({ root, settings, credentials, fetchImpl }); await sync.start();
   assert.equal(requests, count); assert.equal(sync.state.state, 'paused'); assert.equal(sync.toolToken, token);
   assert.equal((await sync.settingsView()).selectedImageModel, 'antigravity/gemini-image');
+  assert.equal((await sync.settingsView()).gemini4CompactTools, false);
   await sync.sync(); assert.ok(requests > count); assert.equal(sync.state.state, 'paused');
 });
