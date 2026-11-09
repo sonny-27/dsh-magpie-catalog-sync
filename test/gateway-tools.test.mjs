@@ -18,7 +18,7 @@ test('image relay authenticates local tools separately, forwards one upstream ke
     const body = JSON.parse(options.body); sent.push(body);
     return Response.json({ jsonrpc: '2.0', id: body.id, result: body.method === 'tools/list' ? { tools: [{ name: 'generate_image', description: 'Draw', inputSchema: { properties: { model: { enum: [...models, 'other/unsupported'] } } } }, { name: 'generate_video' }, { name: 'generation_result' }] } : { content: [{ type: 'text', text: 'ok' }] } });
   } });
-  const relay = await createRelay({ getConnection: async () => connection, getCatalog: () => undefined, toolsBridge: bridge, getToolToken: async () => 'local-tool-test-token', getImageModels: () => models });
+  const relay = await createRelay({ getConnection: async () => connection, getCatalog: () => ({ models: [], mapping: {} }), toolsBridge: bridge, getToolToken: async () => 'local-tool-test-token', getImageModels: () => models });
   t.after(() => relay.close());
   const url = relay.baseURL.replace(/\/v1$/, '') + '/mcp/magpie/image?rev=test';
   const call = (key, method, params) => fetch(url, { method: 'POST', headers: { authorization: 'Bearer ' + key, 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 'test', method, params }) });
@@ -33,6 +33,10 @@ test('image relay authenticates local tools separately, forwards one upstream ke
   assert.equal(list.result.tools[0].inputSchema.properties.model.default, models[1]);
   assert.equal((await call('local-tool-test-token', 'tools/call', { name: 'generate_image', arguments: { prompt: 'test' } })).status, 200);
   assert.equal(sent.at(-1).params.arguments.model, models[1]);
+  const countBeforeVideo = sent.length;
+  assert.equal((await call('local-tool-test-token', 'tools/call', { name: 'generate_video', arguments: { prompt: 'must not generate' } })).status, 502);
+  assert.equal(sent.length, countBeforeVideo, 'withdrawn video calls must not reach Magpie');
+  assert.equal((await fetch(relay.baseURL + '/videos/video_fixture/content', { headers: { authorization: 'Bearer ' + connection.key } })).status, 404);
   assert.equal((await call('local-tool-test-token', 'tools/call', { name: 'generate_image', arguments: { prompt: 'test', model: 'other/unsupported' } })).status, 502);
   config.imageEnabled = false;
   assert.equal((await call('local-tool-test-token', 'tools/list', {})).status, 403);

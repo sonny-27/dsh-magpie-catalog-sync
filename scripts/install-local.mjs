@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { normalizeBaseURL } from '../lib/catalog.mjs';
-import { normalizeLoginURL } from '../lib/login-url.mjs';
 
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -22,10 +21,10 @@ const name = 'dsh-magpie-catalog-sync';
 const source = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
 const files = [];
-const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/browser_session.py', 'server/gemini-video/proxy.py', 'server/gemini-video/login_portal.py', 'server/gemini-video/account_pool.py', 'server/gemini-video/multi_login_portal.py', 'server/gemini-video/provision_accounts.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
+const serverSources = new Set(['server/search-policy.py']);
 function collect(relative) {
   const portable = relative.replaceAll('\\', '/');
-  if (portable.startsWith('server/') && portable !== 'server/gemini-video' && !serverSources.has(portable)) return;
+  if (portable.startsWith('server/') && !serverSources.has(portable)) return;
   const file = path.join(source, relative), stat = fs.lstatSync(file);
   if (stat.isSymbolicLink()) throw new Error('插件源文件不能是符号链接');
   if (stat.isDirectory()) for (const child of fs.readdirSync(file)) collect(path.join(relative, child));
@@ -51,7 +50,6 @@ config.providerId ??= 'magpie-sync';
 config.credentialRef ??= 'MAGPIE_CATALOG_SYNC_KEY';
 config.pollSeconds ??= 300;
 config.api ??= 'openai-responses';
-if (args['video-login-url'] !== undefined) config.videoLoginURL = normalizeLoginURL(args['video-login-url']);
 let secret;
 if (args['key-file']) {
   secret = fs.readFileSync(path.resolve(args['key-file']), 'utf8').trim();
@@ -67,6 +65,7 @@ const backup = path.join(home, 'backups', name + '-' + stamp, profileName);
 fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
 fs.writeFileSync(path.join(backup, 'package.json'), original, { mode: 0o600 });
 if (fs.existsSync(configPath)) fs.copyFileSync(configPath, path.join(backup, 'config.json'));
+for (const field of ['videoEnabled', 'videoModel', 'videoLoginURL']) delete config[field];
 const link = path.join(profile, 'node_modules', name);
 fs.mkdirSync(path.dirname(link), { recursive: true });
 if (fs.existsSync(link)) {

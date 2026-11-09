@@ -250,20 +250,20 @@ function SubscriptionSettings() {
     "div",
     { style: { maxWidth: 920, padding: 24 } },
     h("h2", null, "Magpie 订阅"),
-    h("p", null, "模型、绘图、视频与搜索共用下面的 API 地址和 Key。"),
+    h("p", null, "模型、绘图与搜索共用下面的 API 地址和 Key。"),
     h(
       "section",
       { style: style.card },
       h("h3", null, "搜索与绘图自检"),
       h("p", null, "连接自检不生成图片；真实出图自检会消耗上游绘图额度。结果只显示状态，不展示密钥或图片下载链接。"),
-      h("div", { style: style.row }, ...[["search", "搜索自检"], ["image", "绘图连接自检"], ["image-generate", "真实出图自检（消耗额度）"], ["video", "视频连接自检"]].map(([kind, label]) => button(label, async () => {
+      h("div", { style: style.row }, ...[["search", "搜索自检"], ["image", "绘图连接自检"], ["image-generate", "真实出图自检（消耗额度）"]].map(([kind, label]) => button(label, async () => {
         D(await subscriptionAPI("diagnostics", { kind }));
         return "自检已启动，结果会自动刷新。";
       }, diagnostics.some((x) => x.kind === kind && ["running", "pending"].includes(x.state))))),
       ...diagnostics.map((result) => h(
         "div",
         { key: result.kind, role: "status", style: { marginTop: 12 } },
-        h("strong", null, { search: "搜索", image: "绘图连接", "image-generate": "真实出图", video: "视频连接" }[result.kind] + "：" + { running: "检查中", pending: "生成中", passed: "通过", failed: "失败" }[result.state]),
+        h("strong", null, { search: "搜索", image: "绘图连接", "image-generate": "真实出图" }[result.kind] + "：" + { running: "检查中", pending: "生成中", passed: "通过", failed: "失败" }[result.state]),
         ...result.stages.map((item, i) => h("p", { key: i }, item.name + "：" + { running: "检查中", passed: "通过", failed: "失败" }[item.state] + (item.detail ? " · " + item.detail : ""))),
         result.note && h("p", null, result.note),
         result.error && h("p", null, result.error)
@@ -294,7 +294,7 @@ function SubscriptionSettings() {
       "section",
       { style: style.card },
       h("h3", null, "自动订阅"),
-      checkbox("autoSyncEnabled", "自动同步新模型、能力与图片/视频版本"),
+      checkbox("autoSyncEnabled", "自动同步新模型、能力与绘图版本"),
       h("label", { style: style.row }, "刷新间隔（秒）", h("input", { "aria-label": "刷新间隔（秒）", style: style.input, type: "number", min: 60, max: 86400, value: form.pollSeconds, onChange: (e) => set("pollSeconds", Number(e.target.value)) })),
       h("p", null, `已订阅 ${view.status?.modelCount ?? 0} 个模型 · ${view.imageModels?.length ?? 0} 个绘图版本`),
       h("p", { style: { fontSize: 12, opacity: 0.7 } }, "最近同步：" + (view.status?.lastSyncedAt ? new Date(view.status.lastSyncedAt).toLocaleString() : "尚未完成") + (view.status?.lastError ? " · " + view.status.lastError : "")),
@@ -315,17 +315,6 @@ function SubscriptionSettings() {
       h("small", null, "所选的两个版本会提供给原生 MCP 绘图工具；未指定版本时使用默认来源。"),
       view.imageAliases?.length > 0 && h("p", { style: { fontSize: 12, opacity: 0.75, overflowWrap: "anywhere" } }, "已核对当前 Magpie MCP：" + view.imageAliases.map((x) => x.requested.replace("codex/", "")).join("、") + " 均映射到 " + view.imageAliases[0].resolved + "。此通道未独立透传这些型号；上游实际版本未报告。独立提供的新版本会自动列入选择。"),
       view.tools?.imageError && h("p", { role: "status" }, view.tools.imageError)
-    ),
-    h(
-      "section",
-      { style: style.card },
-      h("h3", null, "视频生成"),
-      checkbox("videoEnabled", "启用视频生成工具，复用统一 API 和 Key"),
-      h("label", { style: style.row }, "网页登录入口", h("input", { type: "url", "aria-label": "网页登录入口", style: { ...style.input, flex: 1 }, value: form.videoLoginURL ?? "", placeholder: "部署者提供的网页登录管理地址", onChange: (e) => set("videoLoginURL", e.target.value) })),
-      view.videoLoginURL && h("p", null, h("a", { href: view.videoLoginURL, target: "_blank", rel: "noopener noreferrer", style: style.button }, "Gemini 多账号管理与网页登录")),
-      select("videoModel", "视频版本", [["", "自动使用首个可用版本"], ...(view.videoModels ?? []).map((x) => [x.id, x.name])]),
-      h("p", { role: "status" }, view.videoModels?.length ? `已发现 ${view.videoModels.length} 个视频版本。生成中会查询原任务，不能重复提交。` : "尚未发现可用视频模型。Gemini 网页通道需要在服务器单独授权网页账号，现有 Antigravity 登录不能代替。"),
-      h("small", null, "专用服务器浏览器可在登录后自动保存网页会话，无需手动复制 Cookie；Google 密码和二次验证由你输入。支持文字生成视频和参考图输入，使用账号当前视频模型；时长和比例是提示请求。视频下载链接不含网关 Key。")
     ),
     h(
       "section",

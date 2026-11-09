@@ -147,29 +147,3 @@ test('installer accepts a fresh profile without upstream or key file for GUI set
   const manifest = JSON.parse(await fs.readFile(path.join(profile, 'package.json'), 'utf8'));
   assert.ok(manifest.dsh.profile.bundles.includes('dsh-magpie-catalog-sync'));
 });
-
-test('installer copies video source without packaging private account data or Python caches', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'magpie-secret-installer-test-'));
-  t.after(async () => {
-    assert.equal(path.dirname(path.resolve(root)), path.resolve(os.tmpdir()));
-    assert.ok(path.basename(root).startsWith('magpie-secret-installer-test-'));
-    await fs.rm(root, { recursive: true, force: true });
-  });
-  const source = path.join(root, 'source'), home = path.join(root, 'home'), profile = path.join(home, 'profiles', 'test');
-  await fs.mkdir(source); await fs.mkdir(profile, { recursive: true });
-  const original = fileURLToPath(new URL('..', import.meta.url));
-  for (const item of ['package.json', 'index.mjs', 'client.js', 'client.mjs', 'cordis.patch.yml', 'README.md', 'LICENSE', 'lib']) await fs.cp(path.join(original, item), path.join(source, item), { recursive: true });
-  await fs.mkdir(path.join(source, 'scripts'));
-  await fs.copyFile(path.join(original, 'scripts/install-local.mjs'), path.join(source, 'scripts/install-local.mjs'));
-  for (const item of ['server/gemini-video/data/account.json', 'server/gemini-video/data/api.key', 'server/gemini-video/browser-profile/chromium/Default/Cookies', 'server/gemini-video/__pycache__/bridge.pyc', 'server/gemini-video/bridge.py']) {
-    const file = path.join(source, item); await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, item.endsWith('bridge.py') ? '# fixture bridge source' : 'FAKE_PRIVATE_RUNTIME_SENTINEL');
-  }
-  await fs.writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'test-profile', private: true }));
-  const result = await promisify(execFile)(process.execPath, [path.join(source, 'scripts/install-local.mjs'), '--home', home, '--profile', 'test']);
-  const installed = JSON.parse(result.stdout).packageDir;
-  assert.equal(await fs.readFile(path.join(installed, 'server/gemini-video/bridge.py'), 'utf8'), '# fixture bridge source');
-  assert.equal(await fs.stat(path.join(installed, 'server/gemini-video/data')).catch(error => error.code), 'ENOENT');
-  assert.equal(await fs.stat(path.join(installed, 'server/gemini-video/browser-profile')).catch(error => error.code), 'ENOENT');
-  assert.equal(await fs.stat(path.join(installed, 'server/gemini-video/__pycache__')).catch(error => error.code), 'ENOENT');
-});
