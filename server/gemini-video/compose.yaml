@@ -1,6 +1,6 @@
 services:
   gemini-video:
-    image: local/magpie-gemini-video:0.4.8
+    image: local/magpie-gemini-video:0.4.9
     container_name: magpie-gemini-video
     build: ./app
     restart: unless-stopped
@@ -10,6 +10,8 @@ services:
       GEMINI_PROXY: http://searxng-clash:7896
       GEMINI_COOKIE_PATH: /data/cookies
       GEMINI_BROWSER_CDP: http://gemini-browser:9222
+      GEMINI_MULTI_ACCOUNT: "1"
+      GEMINI_MAX_ACCOUNTS: "5"
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./data:/data
@@ -55,7 +57,7 @@ services:
     networks: [session]
     depends_on: [browser-proxy]
   browser-proxy:
-    image: local/magpie-gemini-video:0.4.8
+    image: local/magpie-gemini-video:0.4.9
     container_name: magpie-gemini-browser-proxy
     command: ["python", "proxy.py"]
     restart: unless-stopped

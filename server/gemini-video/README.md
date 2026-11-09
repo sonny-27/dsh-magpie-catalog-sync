@@ -1,5 +1,24 @@
 # Gemini 网页视频桥接
 
+## 多账号
+
+默认 Compose 启用 `GEMINI_MULTI_ACCOUNT=1`，使用一个 API 地址、Key 和 `gemini-web-video` 模型聚合多个独立网页账号。原 `data/` 与 `browser-profile/` 继续作为“账号1”，保持原 Key 和任务 ID；新账号的状态在 `data/accounts/<id>/`，浏览器资料在 `browser-profiles/<id>/`。账号名称由操作者填写，不自动读取 Google 邮箱，也不注册新的 Google 账号。
+
+将 `account_pool.py` 一并放入 `app/` 构建；将 `provision_accounts.py` 放入宿主机部署目录。在操作者电脑运行 `multi_login_portal.py`，提供与单账号门户相同的 SSH 参数，并用 `--provision-command "python3 /部署目录/provision_accounts.py /部署目录 {account}"` 配置按需启动钩子。命令模板来自操作者 CLI；网页只传递服务器生成并验证过的账号 ID。不要把 Docker socket 挂入视频 API 容器。
+
+管理页支持添加、重命名、停用新任务、设默认、启动/重试浏览器。默认上限 5 个账号，可由 `GEMINI_MAX_ACCOUNTS` 调整（最大 20）；每个浏览器共享同一镜像层，但有独立持久化目录。新增浏览器只连接原内部网络，不发布 GUI、VNC 或调试端口。
+
+新任务策略可选：
+
+- `priority`：优先默认账号，跳过未登录或已停用账号。
+- `round_robin`：在会话就绪且启用的账号间轮询，轮询位置随设置保存。
+
+策略选择只在提交前发生。任务 ID 绑定原账号，后续查询和下载不重新选择；切换默认、停用或更名不会迁移或重新提交任务。停用不会删除会话资料，并且保留旧任务下载。队列最多 3 个、缓存约 2 GiB 的限制对所有账号合计生效。
+
+账号策略是此服务器入口的全局设置，影响所有使用该视频入口的新任务。后续更新整个部署时，应同时传入基础 Compose 文件和生成的 `accounts.compose.json`；账户浏览器的配置保存在独立挂载目录中。若额外容器未启动，可在管理页对相应账号使用“启动/重试”，无需重建账号目录。
+
+“会话就绪”不代表已查询到剩余视频额度；不会因为额度或生成错误而跨账号自动重提。每个窗口固定使用一个 Google 账号，有任务运行时不要在该窗口更换登录身份。多个登录窗口使用不同的本机端口与账号专属管理 Cookie，彼此不能借用浏览器管理会话。真实多账号授权、视频生成与下载需本人登录后另行验收。
+
 将单独授权的 Gemini Apps 网页会话接入 Magpie 的 OpenAI Videos API。它使用 `gemini-webapi==2.1.1`，不使用 Google AI Studio 付费 API，也不读取操作者电脑的个人浏览器资料。已有 Antigravity/Code Assist OAuth 不能代替 Gemini Apps 会话。
 
 容器 API 只绑定宿主机 `127.0.0.1:8012`，Magpie 在共同 Docker 网络中使用 `http://magpie-gemini-video:8010/v1`。`compose.yaml` 假定已有 `searxng-proxy` 网络及 `searxng-clash:7896` HTTP 代理；部署到其他环境时修改网络和代理。将 `Dockerfile`、`bridge.py`、`manage.py`、`browser_session.py`、`proxy.py` 放入部署目录的 `app/`，compose 文件置于其父目录；旁边创建 `data/` 和 `browser-profile/`，设为容器 UID/GID 10001 可写且权限 0700。构建镜像并启动 Compose 后，只有此部署的专用浏览器会参与会话管理。

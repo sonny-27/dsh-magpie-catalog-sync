@@ -53,9 +53,13 @@ class SSH:
             self.client = client
             return client
 
-    def execute(self, command):
+    def execute(self, command, input_data=None):
         client = self.connection()
         _stdin, stdout, stderr = client.exec_command(command, timeout=35)
+        if input_data is not None:
+            _stdin.write(json.dumps(input_data))
+            _stdin.flush()
+            _stdin.channel.shutdown_write()
         data = stdout.read(65537)
         error = stderr.read(8192)
         if len(data) > 65536 or stdout.channel.recv_exit_status():
@@ -89,6 +93,7 @@ class Portal:
         self.root.mkdir(parents=True, exist_ok=True)
         self.nonce = secrets.token_urlsafe(32)
         self.console_cookie = secrets.token_urlsafe(32)
+        self.cookie_name = 'gemini_console'
         self.after_authorize = after_authorize
         self.state = {'state': 'starting', 'message': '正在连接服务器的专用登录浏览器…', 'sessionSaved': False, 'magpieEnabled': False}
         self.lock = threading.Lock()
@@ -141,7 +146,7 @@ def handler(portal):
 
         def console_authorized(self):
             try:
-                cookie = SimpleCookie(self.headers.get('Cookie', '')).get('gemini_console')
+                cookie = SimpleCookie(self.headers.get('Cookie', '')).get(portal.cookie_name)
                 return bool(cookie and hmac.compare_digest(cookie.value, portal.console_cookie))
             except Exception:
                 return False
@@ -249,7 +254,7 @@ def handler(portal):
                     raise ValueError()
             except Exception:
                 return self.respond(403, {'message': '本机管理会话无效'})
-            return self.respond(303, {}, headers={'Set-Cookie': 'gemini_console=' + portal.console_cookie + '; HttpOnly; SameSite=Strict; Path=/', 'Location': '/browser/'})
+            return self.respond(303, {}, headers={'Set-Cookie': portal.cookie_name + '=' + portal.console_cookie + '; HttpOnly; SameSite=Strict; Path=/', 'Location': '/browser/'})
     return Handler
 
 

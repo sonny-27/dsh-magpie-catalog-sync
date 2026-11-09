@@ -319,6 +319,11 @@ class Bridge:
             job = self.jobs.get(job_id)
             return dict(job) if job else None
 
+    def output_file(self, job_id):
+        if not ID.fullmatch(job_id):
+            raise ValueError('Invalid video ID')
+        return self.root / job_id / 'output.mp4'
+
     def cleanup(self):
         with self.lock:
             for job_id, job in list(self.jobs.items()):
@@ -374,7 +379,7 @@ def handler(bridge):
         def do_GET(self):
             if self.path == '/healthz':
                 return self.json(200, bridge.status())
-            admin = self.path == '/admin/browser/status'
+            admin = self.path in ['/admin/browser/status', '/admin/accounts']
             if not self.authorized(admin):
                 return self.json(401, {'error': {'message': '需要视频桥接凭据'}})
             if admin:
@@ -388,7 +393,7 @@ def handler(bridge):
                 return self.json(404, {'error': {'message': '未找到视频任务'}})
             if not match[2]:
                 return self.json(200, job)
-            file = bridge.root / job['id'] / 'output.mp4'
+            file = bridge.output_file(job['id'])
             if job['status'] != 'completed' or not file.is_file():
                 return self.json(409, {'error': {'message': '视频尚未完成或已过期'}})
             self.send_response(200)
@@ -401,22 +406,32 @@ def handler(bridge):
                 shutil.copyfileobj(stream, self.wfile, 65536)
 
         def do_POST(self):
-            admin = self.path in ['/admin/session', '/admin/browser/start']
+            account_action = re.fullmatch(r'/admin/accounts/(add|update|settings)', self.path)
+            admin = self.path in ['/admin/session', '/admin/browser/start'] or bool(account_action)
             if not self.authorized(admin):
                 return self.json(401, {'error': {'message': '需要调用凭据'}})
-            if self.path not in ['/v1/videos', '/admin/session', '/admin/browser/start']:
+            if self.path not in ['/v1/videos', '/admin/session', '/admin/browser/start'] and not account_action:
                 return self.json(404, {'error': {'message': '未知接口'}})
             try:
                 length = int(self.headers.get('Content-Length', '0'))
                 if not 0 < length <= (32768 if admin else MAX_BODY) or self.headers.get('Transfer-Encoding'):
                     return self.json(413, {'error': {'message': '请求大小无效'}})
                 body = json.loads(self.rfile.read(length))
+                if account_action:
+                    if not hasattr(bridge, 'manage_accounts'):
+                        return self.json(400, {'error': {'message': '此部署未启用多账号'}})
+                    return self.json(200, bridge.manage_accounts(account_action[1], body))
                 if self.path == '/admin/browser/start':
+                    if hasattr(bridge, 'kick_browser_checks'):
+                        bridge.kick_browser_checks()
+                        return self.json(200, bridge.status())
                     if not bridge.browser:
                         return self.json(400, {'error': {'message': '此部署尚未启用专用登录浏览器'}})
                     bridge.submit(bridge.sync_browser())
                     return self.json(200, bridge.status())
                 if admin:
+                    if hasattr(bridge, 'manage_accounts'):
+                        return self.json(400, {'error': {'message': '请在对应账号的专用浏览器中登录'}})
                     if bridge.browser:
                         return self.json(400, {'error': {'message': '此部署请在专用浏览器中登录，会话会自动保存'}})
                     try:
@@ -433,7 +448,11 @@ def handler(bridge):
 
 
 if __name__ == '__main__':
-    bridge = Bridge(os.environ.get('GEMINI_VIDEO_DATA', '/data'))
+    if os.environ.get('GEMINI_MULTI_ACCOUNT') == '1':
+        from account_pool import AccountPool
+        bridge = AccountPool(os.environ.get('GEMINI_VIDEO_DATA', '/data'))
+    else:
+        bridge = Bridge(os.environ.get('GEMINI_VIDEO_DATA', '/data'))
     server = ThreadingHTTPServer(('0.0.0.0', int(os.environ.get('PORT', '8010'))), handler(bridge))
     server.daemon_threads = True
     try:

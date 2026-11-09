@@ -1,6 +1,6 @@
 {
   "name": "dsh-magpie-catalog-sync",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "Automatically import Magpie model capabilities, reasoning efforts and advertised service tiers into DSH and DS Bot.",
   "type": "module",
   "main": "index.mjs",
@@ -20,6 +20,9 @@
     "server/gemini-video/browser_session.py",
     "server/gemini-video/proxy.py",
     "server/gemini-video/login_portal.py",
+    "server/gemini-video/account_pool.py",
+    "server/gemini-video/multi_login_portal.py",
+    "server/gemini-video/provision_accounts.py",
     "server/gemini-video/Dockerfile",
     "server/gemini-video/compose.yaml",
     "server/gemini-video/README.md",

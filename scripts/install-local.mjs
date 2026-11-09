@@ -22,7 +22,7 @@ const name = 'dsh-magpie-catalog-sync';
 const source = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
 const files = [];
-const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/browser_session.py', 'server/gemini-video/proxy.py', 'server/gemini-video/login_portal.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
+const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/browser_session.py', 'server/gemini-video/proxy.py', 'server/gemini-video/login_portal.py', 'server/gemini-video/account_pool.py', 'server/gemini-video/multi_login_portal.py', 'server/gemini-video/provision_accounts.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
 function collect(relative) {
   const portable = relative.replaceAll('\\', '/');
   if (portable.startsWith('server/') && portable !== 'server/gemini-video' && !serverSources.has(portable)) return;
