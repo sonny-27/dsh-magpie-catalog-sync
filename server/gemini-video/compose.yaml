@@ -1,6 +1,6 @@
 services:
   gemini-video:
-    image: local/magpie-gemini-video:0.4.7
+    image: local/magpie-gemini-video:0.4.8
     container_name: magpie-gemini-video
     build: ./app
     restart: unless-stopped
@@ -9,6 +9,7 @@ services:
     environment:
       GEMINI_PROXY: http://searxng-clash:7896
       GEMINI_COOKIE_PATH: /data/cookies
+      GEMINI_BROWSER_CDP: http://gemini-browser:9222
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./data:/data
@@ -24,8 +25,60 @@ services:
       options:
         max-size: "10m"
         max-file: "2"
-    networks: [proxy]
+    networks: [proxy, session]
+    depends_on: [gemini-browser]
+  gemini-browser:
+    image: jlesage/chromium:v26.10.1@sha256:71e2e8468eb00519a1f90cbb82a12651c2541c6f5e85030faf9c8dd2ec2cc831
+    container_name: magpie-gemini-browser
+    restart: unless-stopped
+    environment:
+      USER_ID: "10001"
+      GROUP_ID: "10001"
+      UMASK: "0077"
+      KEEP_APP_RUNNING: "1"
+      CHROMIUM_REMOTE_DEBUGGING: "1"
+      CHROMIUM_CUSTOM_ARGS: "--proxy-server=http://browser-proxy:7896 --disk-cache-size=67108864 https://gemini.google.com/app"
+      WEB_FILE_MANAGER: "0"
+      WEB_TERMINAL: "0"
+      WEB_HOST_CLIPBOARD_SYNC: "0"
+      WEB_AUDIO: "0"
+    volumes:
+      - ./browser-profile:/config
+    shm_size: 512m
+    mem_limit: 2g
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks: [session]
+    depends_on: [browser-proxy]
+  browser-proxy:
+    image: local/magpie-gemini-video:0.4.8
+    container_name: magpie-gemini-browser-proxy
+    command: ["python", "proxy.py"]
+    restart: unless-stopped
+    environment:
+      PROXY_HOST: searxng-clash
+      PROXY_PORT: "7896"
+      PYTHONDONTWRITEBYTECODE: "1"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    pids_limit: 64
+    healthcheck:
+      disable: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks: [proxy, session]
 networks:
   proxy:
     external: true
     name: searxng-proxy
+  session:
+    internal: true

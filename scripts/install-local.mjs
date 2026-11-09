@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { normalizeBaseURL } from '../lib/catalog.mjs';
+import { normalizeLoginURL } from '../lib/login-url.mjs';
 
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) {
@@ -21,7 +22,7 @@ const name = 'dsh-magpie-catalog-sync';
 const source = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageManifest = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
 const files = [];
-const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
+const serverSources = new Set(['server/search-policy.py', 'server/gemini-video/bridge.py', 'server/gemini-video/manage.py', 'server/gemini-video/browser_session.py', 'server/gemini-video/proxy.py', 'server/gemini-video/login_portal.py', 'server/gemini-video/Dockerfile', 'server/gemini-video/compose.yaml', 'server/gemini-video/README.md']);
 function collect(relative) {
   const portable = relative.replaceAll('\\', '/');
   if (portable.startsWith('server/') && portable !== 'server/gemini-video' && !serverSources.has(portable)) return;
@@ -50,6 +51,7 @@ config.providerId ??= 'magpie-sync';
 config.credentialRef ??= 'MAGPIE_CATALOG_SYNC_KEY';
 config.pollSeconds ??= 300;
 config.api ??= 'openai-responses';
+if (args['video-login-url'] !== undefined) config.videoLoginURL = normalizeLoginURL(args['video-login-url']);
 let secret;
 if (args['key-file']) {
   secret = fs.readFileSync(path.resolve(args['key-file']), 'utf8').trim();

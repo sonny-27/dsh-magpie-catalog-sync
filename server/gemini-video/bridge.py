@@ -1,7 +1,7 @@
 """Private Gemini Apps session -> OpenAI-shaped asynchronous video API.
 
-No browser-cookie harvesting, API-key fallback or automatic resubmission.
-The operator imports a dedicated Gemini session through the loopback admin API.
+The dedicated server browser can save its own Gemini session automatically.
+No desktop browser profiles, API-key fallback or automatic resubmission.
 """
 import asyncio
 import base64
@@ -90,7 +90,8 @@ async def new_client(account):
     client = GeminiClient(account['__Secure-1PSID'], account.get('__Secure-1PSIDTS', ''),
                           proxy=os.environ.get('GEMINI_PROXY') or None)
     try:
-        await asyncio.wait_for(client.init(timeout=600, auto_close=False, auto_refresh=True, verbose=False), 45)
+        await asyncio.wait_for(client.init(timeout=600, auto_close=False,
+            auto_refresh=not bool(os.environ.get('GEMINI_BROWSER_CDP')), verbose=False), 45)
         return client
     except BaseException:
         with contextlib.suppress(Exception):
@@ -99,7 +100,7 @@ async def new_client(account):
 
 
 class Bridge:
-    def __init__(self, root, factory=new_client):
+    def __init__(self, root, factory=new_client, browser=None):
         self.root = pathlib.Path(root)
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.api_key = secret(self.root / 'api.key')
@@ -109,6 +110,14 @@ class Bridge:
         self.jobs = {}
         self.client = None
         self.state = 'needs_login'
+        self.browser = browser
+        if self.browser is None and os.environ.get('GEMINI_BROWSER_CDP'):
+            from browser_session import BrowserSession
+            self.browser = BrowserSession(os.environ['GEMINI_BROWSER_CDP'])
+        self.browser_lock = asyncio.Lock()
+        self.browser_account = None
+        self.browser_failed_account = None
+        self.browser_retry_at = 0
         self.loop = asyncio.new_event_loop()
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.thread.start()
@@ -126,11 +135,16 @@ class Bridge:
                 continue
         self.submit(self.bootstrap())
         self.submit(self.cleaner())
+        if self.browser:
+            self.submit(self.watch_browser())
 
     def submit(self, operation):
         return asyncio.run_coroutine_threadsafe(operation, self.loop)
 
     async def bootstrap(self):
+        if self.browser:
+            await self.sync_browser()
+            return
         file = self.root / 'account.json'
         if file.exists():
             try:
@@ -166,10 +180,58 @@ class Bridge:
         if previous:
             await previous.close()
 
+    async def sync_browser(self):
+        if not self.browser:
+            return
+        async with self.browser_lock:
+            account = None
+            try:
+                account = await self.browser.account()
+                if not account:
+                    if self.state != 'authorizing':
+                        self.state = 'needs_login'
+                    return
+                if account == self.browser_failed_account and time.monotonic() < self.browser_retry_at:
+                    self.browser.state = 'session_invalid'
+                    return
+                if self.state == 'ready' and self.client and self.browser_account and self.browser_account.get('__Secure-1PSID') == account['__Secure-1PSID']:
+                    if account != self.browser_account:
+                        jar = self.client.cookies
+                        for name, value in account.items():
+                            jar.set(name, value, domain='.google.com', path='/')
+                        atomic(self.root / 'account.json', account)
+                        self.browser_account = dict(account)
+                else:
+                    with self.lock:
+                        if any(job['status'] in ['queued', 'in_progress'] for job in self.jobs.values()):
+                            self.state = 'needs_login'
+                            self.browser.state = 'waiting_for_jobs'
+                            return
+                    await self.import_account(account)
+                    self.browser_account = dict(account)
+                self.browser.saved = True
+                self.browser.state = 'authorized'
+                self.browser_failed_account = None
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.state = 'needs_login'
+                self.browser.state = 'session_invalid'
+                self.browser_failed_account = dict(account) if account else None
+                self.browser_retry_at = time.monotonic() + 60
+
+    async def watch_browser(self):
+        while True:
+            await asyncio.sleep(5)
+            await self.sync_browser()
+
     def status(self):
-        return {'state': self.state, 'configured': (self.root / 'account.json').exists(),
+        value = {'state': self.state, 'configured': (self.root / 'account.json').exists(),
                 'model': MODEL, 'modelVersion': 'account-default',
                 'note': '使用网页账号当前视频模型；时长和比例为提示请求，不保证上游严格采用'}
+        if self.browser:
+            value['browser'] = self.browser.status()
+        return value
 
     def save_job(self, job):
         atomic(self.root / job['id'] / 'job.json', job)
@@ -220,7 +282,11 @@ class Bridge:
                     if not videos:
                         raise ValueError('no_video')
                     # One requested video, one download; never submit generation again when pending.
-                    result = await videos[0].save(path=str(directory), filename='output.mp4', verbose=False)
+                    if self.browser:
+                        await self.browser.download(videos[0], directory / 'output.mp4')
+                        result = {'video': str(directory / 'output.mp4')}
+                    else:
+                        result = await videos[0].save(path=str(directory), filename='output.mp4', verbose=False)
                 file = pathlib.Path(result['video']) if isinstance(result, dict) and result.get('video') else directory / 'output.mp4'
                 if file.resolve() != (directory / 'output.mp4').resolve():
                     raise ValueError('unexpected_file')
@@ -308,8 +374,11 @@ def handler(bridge):
         def do_GET(self):
             if self.path == '/healthz':
                 return self.json(200, bridge.status())
-            if not self.authorized():
+            admin = self.path == '/admin/browser/status'
+            if not self.authorized(admin):
                 return self.json(401, {'error': {'message': '需要视频桥接凭据'}})
+            if admin:
+                return self.json(200, bridge.status())
             if self.path == '/v1/models':
                 models = [{'id': MODEL, 'object': 'model', 'kind': 'video', 'name': 'Gemini 网页视频（账号当前模型）'}] if bridge.state == 'ready' else []
                 return self.json(200, {'object': 'list', 'data': models})
@@ -332,17 +401,24 @@ def handler(bridge):
                 shutil.copyfileobj(stream, self.wfile, 65536)
 
         def do_POST(self):
-            admin = self.path == '/admin/session'
+            admin = self.path in ['/admin/session', '/admin/browser/start']
             if not self.authorized(admin):
                 return self.json(401, {'error': {'message': '需要调用凭据'}})
-            if self.path not in ['/v1/videos', '/admin/session']:
+            if self.path not in ['/v1/videos', '/admin/session', '/admin/browser/start']:
                 return self.json(404, {'error': {'message': '未知接口'}})
             try:
                 length = int(self.headers.get('Content-Length', '0'))
                 if not 0 < length <= (32768 if admin else MAX_BODY) or self.headers.get('Transfer-Encoding'):
                     return self.json(413, {'error': {'message': '请求大小无效'}})
                 body = json.loads(self.rfile.read(length))
+                if self.path == '/admin/browser/start':
+                    if not bridge.browser:
+                        return self.json(400, {'error': {'message': '此部署尚未启用专用登录浏览器'}})
+                    bridge.submit(bridge.sync_browser())
+                    return self.json(200, bridge.status())
                 if admin:
+                    if bridge.browser:
+                        return self.json(400, {'error': {'message': '此部署请在专用浏览器中登录，会话会自动保存'}})
                     try:
                         bridge.submit(bridge.import_account(body)).result(55)
                     except ValueError:

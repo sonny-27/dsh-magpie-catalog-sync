@@ -1,7 +1,7 @@
 FROM python:3.12-slim
-RUN pip install --no-cache-dir gemini-webapi==2.1.1
+RUN pip install --no-cache-dir gemini-webapi==2.1.1 websockets==17.4
 WORKDIR /app
-COPY bridge.py manage.py ./
+COPY bridge.py manage.py browser_session.py proxy.py ./
 ENV GEMINI_COOKIE_PATH=/data/cookies PYTHONUNBUFFERED=1
 USER 10001:10001
 EXPOSE 8010

@@ -26,5 +26,6 @@ status.json
 browser-launch.json
 .credentials*
 server/gemini-video/data/
+server/gemini-video/browser-profile/
 incoming-session.json
 account.json
